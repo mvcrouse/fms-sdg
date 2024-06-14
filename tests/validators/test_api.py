@@ -126,6 +126,22 @@ class TestApiValidator:
             "Validator should have failed due to arg content not being in question!"
         )
 
+        func_calls = [
+            {"name": "add", "arguments": {"n1": 3, "n2": 4}},
+            {"name": "add_event", "arguments": {"event": "store"}},
+        ]
+        question = "add(3, 4) and add an event store to my calendar"
+        api_info = get_args(func_calls)
+        args = [api_info, question, json.dumps(func_calls)]
+
+        test_instance = [Instance(args, parallel_kwargs)]
+        validator.validate_batch(test_instance)
+        assert not test_instance[
+            0
+        ].result, (
+            "Validator should have failed due to arg content not being in question!"
+        )
+
     def test_yes_no(self):
         validator = ApiGenSpecYesNoValidation("test_yes_no", dict())
 

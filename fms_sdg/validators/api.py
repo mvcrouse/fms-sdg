@@ -71,6 +71,12 @@ class APIGenSpecValidator(BaseValidator):
         ):
             return False
 
+        # ensure no function calls in question itself
+        for api in api_info.values():
+            for check_string in [f"{api[_NAME]}(", '"name":']:
+                if check_string in question:
+                    return False
+
         for component in sep_components:
 
             # basic malformedness check
