@@ -169,6 +169,8 @@ class ApiDataBuilder(DataBuilder):
                 instr.api_specifications[instr.seed_api_group],
                 instr.positive_functions,
                 instr.task_name,
+                instr.intent_only,
+                instr.require_nested,
             )
             prompt_strings.append(
                 f"API:\n{instr_api_specification}\nQ: {instr.input}\nA: {instr.output}"
@@ -200,6 +202,8 @@ class ApiDataBuilder(DataBuilder):
             new_instr.api_specifications[new_group],
             new_pos_apis,
             new_instr.task_name,
+            new_instr.intent_only,
+            new_instr.require_nested,
         )
 
         new_instr.positive_functions = new_pos_apis
