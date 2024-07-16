@@ -1,11 +1,71 @@
 # Standard
 from typing import Any
+import importlib
+import os
+import re
 
 # Local
 from fms_dgt.base.block import BaseBlock
 from fms_dgt.base.dataloader import BaseDataloader
 from fms_dgt.base.datastore import BaseDatastore
 from fms_dgt.base.resource import BaseResource
+from fms_dgt.utils import sdg_logger
+
+# TODO: better strategy needed, but this will eliminate some of the confusing errors people get when registering a new class
+SEARCHABLE_DIRECTORIES = [
+    os.path.join("fms_dgt", "blocks"),
+    os.path.join("fms_dgt", "dataloaders"),
+    os.path.join("fms_dgt", "datastores"),
+]
+REGISTRATION_MODULE_MAP = {}
+
+
+def _build_importable_registration_map(registration_func: str):
+    def extract_registered_classes(file_contents: str):
+        classes = []
+        for matching_pattern in re.findall(f"{registration_func}\(.*\)", file_contents):
+            # last character is ")"
+            matching_pattern = matching_pattern.replace(registration_func + "(", "")[
+                :-1
+            ]
+            classes.extend(
+                [pattern.replace('"', "") for pattern in matching_pattern.split(",")]
+            )
+        return classes
+
+    if registration_func not in REGISTRATION_MODULE_MAP:
+        REGISTRATION_MODULE_MAP[registration_func] = dict()
+        for search_dir in SEARCHABLE_DIRECTORIES:
+            for dirpath, _, filenames in os.walk(search_dir):
+                for filename in filenames:
+                    filepath = os.path.join(dirpath, filename)
+                    if filepath.endswith(".py"):
+                        import_path = filepath.replace(os.sep, ".")[:-3]
+                        with open(filepath, "r") as f:
+                            class_names = extract_registered_classes(f.read())
+                            for class_name in class_names:
+                                REGISTRATION_MODULE_MAP[registration_func][
+                                    class_name
+                                ] = import_path
+
+
+def _dynamic_import(registration_func: str, class_name: str):
+    _build_importable_registration_map(registration_func)
+    if (
+        registration_func in REGISTRATION_MODULE_MAP
+        and class_name in REGISTRATION_MODULE_MAP[registration_func]
+    ):
+        import_path = REGISTRATION_MODULE_MAP[registration_func][class_name]
+        try:
+            sdg_logger.info(
+                f"Attempting dynamic import of {import_path} for {class_name}"
+            )
+            importlib.import_module(import_path)
+        except ModuleNotFoundError as e:
+            # we try both, but we will overwrite with include path
+            if f"No module named '{import_path}" not in str(e):
+                raise e
+
 
 BLOCK_REGISTRY = {}
 
@@ -31,6 +91,8 @@ def register_block(*names):
 
 
 def get_block(block_name):
+    if block_name not in BLOCK_REGISTRY:
+        _dynamic_import("register_block", block_name)
     try:
         return BLOCK_REGISTRY[block_name]
     except KeyError:
@@ -64,6 +126,8 @@ def register_resource(*names):
 
 
 def get_resource(resource_name, *args: Any, **kwargs: Any):
+    if resource_name not in RESOURCE_REGISTRY:
+        _dynamic_import("register_resource", resource_name)
     try:
         resource: BaseResource = RESOURCE_REGISTRY[resource_name](*args, **kwargs)
     except KeyError:
@@ -125,6 +189,8 @@ def register_dataloader(*names):
 
 
 def get_dataloader(dataloader_name):
+    if dataloader_name not in DATALOADER_REGISTRY:
+        _dynamic_import("register_dataloader", dataloader_name)
     try:
         return DATALOADER_REGISTRY[dataloader_name]
     except KeyError:
@@ -157,6 +223,8 @@ def register_datastore(*names):
 
 
 def get_datastore(datastore_name):
+    if datastore_name not in DATASTORE_REGISTRY:
+        _dynamic_import("register_datastore", datastore_name)
     try:
         return DATASTORE_REGISTRY[datastore_name]
     except KeyError:
