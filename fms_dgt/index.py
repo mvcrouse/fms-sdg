@@ -112,24 +112,31 @@ class DataBuilderIndex:
         def add_file(root, f):
 
             if f.endswith(".yaml"):
-                f_builder_dir = os.path.split(root)[-1]
-                yaml_path = os.path.join(root, f)
-                config = utils.load_yaml_config(yaml_path, mode="simple")
+                f_builder_dir = root.split(os.sep)
+                if "databuilders" in f_builder_dir:
+                    r_dir_index = f_builder_dir.index("databuilders") - 1
+                    f_builder_dir = os.path.join(*f_builder_dir[r_dir_index:])
+                    yaml_path = os.path.join(root, f)
+                    config = utils.load_yaml_config(yaml_path, mode="simple")
 
-                # TODO: better validation as to what files are builders and what files aren't
-                if not _NAME_KEY in config:
-                    return
+                    # TODO: better validation as to what files are builders and what files aren't
+                    if not _NAME_KEY in config:
+                        return
 
-                builder_name = config[_NAME_KEY]
+                    builder_name = config[_NAME_KEY]
 
-                assert (
-                    builder_name not in self._builder_index
-                ), f"Multiple overriding configuration files detected for data builder {builder_name}"
+                    if builder_name in self._builder_index:
+                        sdg_logger.warning(
+                            "Multiple overriding configuration files detected for data builder %s, the two databuilders are found at '%s' and '%s'",
+                            builder_name,
+                            f_builder_dir,
+                            self._builder_index[builder_name]["builder_dir"],
+                        )
 
-                self._builder_index[builder_name] = {
-                    "builder_dir": f_builder_dir,
-                    "config": config,
-                }
+                    self._builder_index[builder_name] = {
+                        "builder_dir": f_builder_dir,
+                        "config": config,
+                    }
 
         if os.path.isfile(builder_path):
             root, f = os.path.split(builder_path)

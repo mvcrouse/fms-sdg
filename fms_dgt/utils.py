@@ -1,10 +1,11 @@
 # Standard
 from collections import ChainMap
 from pathlib import Path
-from typing import Any, Dict, List, TypeVar
+from typing import Any, Dict, List, TypeVar, Union
 import copy
 import fnmatch
 import importlib.util
+import json
 import logging
 import os
 
@@ -72,40 +73,18 @@ def pattern_match(patterns, source_list):
     return sorted(list(task_names))
 
 
-def import_builder(inp_dir: str, include_paths: str = None) -> None:
-    include_paths = (
-        [include_path.replace(os.sep, ".") for include_path in include_paths]
-        if include_paths is not None
-        else []
-    )
+def import_builder(inp_dir: str) -> None:
 
-    loaded = False
+    imp_path = inp_dir.replace(os.sep, ".")
 
-    # TODO: this must be generalized
-    for imp_path in [
-        "fms_dgt.databuilders.generation",
-        "fms_dgt.databuilders.transformation",
-    ] + include_paths:
-        if imp_path is not None:
-            import_path = f"{imp_path}.{inp_dir}.generate"
-            # we try both, but we will overwrite with include path
-            try:
-                loaded = dynamic_import(import_path) or loaded
-            except ModuleNotFoundError as e:
-                # we try both, but we will overwrite with include path
-                if f"No module named '{imp_path}.{inp_dir}" not in str(e):
-                    raise e
-
-    if not loaded:
-        err_str = f"No module named 'fms_dgt.databuilders.{inp_dir}.generate'"
-        if include_paths is not None:
-            err_str += "".join(
-                [
-                    f" or '{include_path}.{inp_dir}.generate'"
-                    for include_path in include_paths
-                ]
-            )
-        raise ModuleNotFoundError(err_str)
+    import_path = f"{imp_path}.generate"
+    # we try both, but we will overwrite with include path
+    try:
+        dynamic_import(import_path)
+    except ModuleNotFoundError as e:
+        # we try both, but we will overwrite with include path
+        if f"No module named '{imp_path}" not in str(e):
+            raise e
 
 
 def dynamic_import(import_module: str, throw_top_level_error: bool = False):
@@ -344,3 +323,44 @@ def load_joint_config(yaml_path: str):
             )
 
     return data_paths, config_overrides
+
+
+def load_nested_paths(inp: Dict, base_dir: str = None):
+    def _is_file(text: str) -> bool:
+        return any([text.endswith(ext) for ext in [".json", ".yaml", ".txt"]])
+
+    def _load_file(path: str):
+        if path.endswith(".json"):
+            with open(path, "r") as f:
+                return json.load(f)
+        elif path.endswith(".yaml"):
+            with open(path, "r") as f:
+                return yaml.safe_load(f)
+        elif path.endswith(".txt"):
+            with open(path, "r") as f:
+                return str(f.read())
+        return path
+
+    def _get_path(fname: str, parent_dir: str):
+        if os.path.isfile(fname):
+            return os.path.normpath(fname)
+        elif parent_dir and os.path.isfile(os.path.join(parent_dir, fname)):
+            return os.path.normpath(os.path.join(parent_dir, fname))
+
+    def _pull_paths(d: Union[List, Dict, str], parent_dir: str):
+        if isinstance(d, dict):
+            for k in d.keys():
+                d[k] = _pull_paths(d[k], parent_dir)
+        elif isinstance(d, list):
+            for i in range(len(d)):
+                d[i] = _pull_paths(d[i], parent_dir)
+        elif type(d) == str and d and _is_file(d):
+            if (file_path := _get_path(d, parent_dir)) not in checked_files:
+                checked_files.add(file_path)
+                return _pull_paths(_load_file(file_path), os.path.dirname(file_path))
+        return d
+
+    checked_files = set()
+    new_dict = _pull_paths(copy.deepcopy(inp), base_dir)
+
+    return new_dict
