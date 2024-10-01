@@ -217,15 +217,22 @@ class DataBuilder(ABC):
 
                 if task.is_complete() or stalled_cts[task.name] <= 0:
 
-                    if stalled_cts[task.name] <= 0:
-                        sdg_logger.info(
-                            "Task %s has not produced any data in the last %s attempts, terminating task",
-                            task.name,
-                            self._max_stalled_requests,
-                        )
+                    sdg_logger.info("Launch postprocessing")
+                    self.execute_postprocessing(completed_tasks)
+                    sdg_logger.info("Postprocessing completed")
 
-                    completed_tasks.append(task)
-                    progress_bar.update()
+                    if task.is_complete():
+
+                        if stalled_cts[task.name] <= 0:
+                            sdg_logger.info(
+                                "Task %s has not produced any data in the last %s attempts, terminating task",
+                                task.name,
+                                self._max_stalled_requests,
+                            )
+
+                        task.finish()
+                        completed_tasks.append(task)
+                        progress_bar.update()
 
             tasks = [task for task in tasks if task not in completed_tasks]
 
@@ -239,13 +246,6 @@ class DataBuilder(ABC):
 
         generate_duration = time.time() - generate_start
         sdg_logger.info("Generation took %.2fs", generate_duration)
-
-        sdg_logger.info("Launch postprocessing")
-        self.execute_postprocessing(completed_tasks)
-        sdg_logger.info("Postprocessing completed")
-
-        for task in completed_tasks:
-            task.finish()
 
     def call_with_task_list(
         self, request_idx: int, tasks: List[SdgTask]
@@ -292,7 +292,7 @@ class DataBuilder(ABC):
         ]
         if post_proc_blocks:
             datastore_assgns = {
-                task.name: [task.datastore, task.make_postprocess_datastore(0)]
+                task.name: [task.datastore, task.make_postprocess_datastore()]
                 for task in completed_tasks
             }
             for i, block in enumerate(post_proc_blocks, start=1):
@@ -309,12 +309,14 @@ class DataBuilder(ABC):
                 datastore_assgns = {
                     task.name: [
                         datastore_assgns[task.name][-1],
-                        task.make_postprocess_datastore(i),
+                        task.make_postprocess_datastore(),
                     ]
                     for task in completed_tasks
                 }
             for task in completed_tasks:
                 task.set_postprocess_datastore(datastore_assgns[task.name][-1])
+                # load_intermediate_data loads from postprocess datastore
+                task.load_intermediate_data()
 
 
 ###
