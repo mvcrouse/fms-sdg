@@ -36,11 +36,9 @@ def generate_data(
     task_overrides = dict()
 
     if config_path:
-        (
-            addlt_data_paths,
-            builder_overrides,
-            task_overrides,
-        ) = utils.load_joint_config(config_path)
+        addlt_data_paths, builder_overrides, task_overrides = utils.load_joint_config(
+            config_path
+        )
         data_paths.extend(addlt_data_paths)
 
     if not data_paths and not config_path:

@@ -294,7 +294,7 @@ class DataBuilder(ABC):
                 task.name: [task.datastore, task.make_postprocess_datastore()]
                 for task in completed_tasks
             }
-            for i, block in enumerate(post_proc_blocks, start=1):
+            for _, block in enumerate(post_proc_blocks):
                 block_inputs = [
                     (
                         task.name,
