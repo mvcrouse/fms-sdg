@@ -1,0 +1,37 @@
+task_name: cot_compositional_transform
+data_builder: compositional
+task_files:
+  - data/generation/code/apis/glaive/detection/multiple_apis/qna.yaml
+  - data/generation/code/apis/glaive/detection/single_api/qna.yaml
+  - data/generation/code/apis/glaive/detection/yes_no/qna.yaml
+  - data/generation/code/apis/glaive/sequencing/parallel_multiple/qna.yaml
+  - data/generation/code/apis/glaive/sequencing/parallel_single/qna.yaml
+  - data/transformation/cot/qna.yaml
+tasks:
+  api_multiple_detection:
+    instruction_format:
+      input: "SYSTEM: You are a helpful assistant with access to the following function calls. Your task is to produce a sequence of function calls necessary to generate response to the user utterance. Use the following function calls as required and return only function \"name\" with empty \"arguments\" dictionary in your response.\n<|function_call_library|>\n{{api_specifications}}\n\nUSER: {{input}}\nASSISTANT: "
+      output: "{{output}}"
+  api_single_detection:
+    instruction_format:
+      input: "SYSTEM: You are a helpful assistant with access to the following function calls. Your task is to produce a sequence of function calls necessary to generate response to the user utterance. Use the following function calls as required and return only function \"name\" with empty \"arguments\" dictionary in your response.\n<|function_call_library|>\n{{api_specifications}}\n\nUSER: {{input}}\nASSISTANT: "
+      output: "{{output}}"
+  api_yes_no_detection:
+    instruction_format:
+      input: "SYSTEM: You are a helpful assistant with access to the following function calls. Your task is to produce a sequence of function calls necessary to generate response to the user utterance. Use the following function calls as required and return only function \"name\" with empty \"arguments\" dictionary in your response.\n<|function_call_library|>\n{{api_specifications}}\n\nUSER: {{input}}\nASSISTANT: "
+      output: "{{output}}"
+  api_parallel_multiple:
+    instruction_format:
+      input: "SYSTEM: You are a helpful assistant with access to the following function calls. Your task is to produce a sequence of function calls necessary to generate response to the user utterance. Use the following function calls as required and return only function \"name\" with empty \"arguments\" dictionary in your response.\n<|function_call_library|>\n{{api_specifications}}\n\nUSER: {{input}}\nASSISTANT: "
+      output: "{{output}}"
+  api_parallel_single:
+    instruction_format:
+      input: "SYSTEM: You are a helpful assistant with access to the following function calls. Your task is to produce a sequence of function calls necessary to generate response to the user utterance. Use the following function calls as required and return only function \"name\" with empty \"arguments\" dictionary in your response.\n<|function_call_library|>\n{{api_specifications}}\n\nUSER: {{input}}\nASSISTANT: "
+      output: "{{output}}"
+dependencies:
+  cot_transform:
+    - api_multiple_detection
+    - api_single_detection
+    - api_yes_no_detection
+    - api_parallel_multiple
+    - api_parallel_single

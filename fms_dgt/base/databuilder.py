@@ -47,7 +47,7 @@ class DataBuilder(ABC):
         config: Union[Mapping, DataBuilderConfig] = None,
         max_gen_requests: int = None,
         max_stalled_requests: int = None,
-        task_kwargs: dict = None,
+        task_kwargs: List[dict] = None,
         **kwargs: Any,
     ) -> None:
         """Initializes data builder object.
