@@ -138,6 +138,7 @@ class SdgTask:
         self._task_card_datastore_cfg = {**base_store_cfg, **self._datastore_cfg}
 
         self._dataloader_state_datastore: BaseDatastore = None
+        self._seed_datastore: BaseDatastore = None
         self._datastore: BaseDatastore = None
         self._final_datastore: BaseDatastore = None
 
@@ -207,7 +208,7 @@ class SdgTask:
         task_card_datastore.save_data([self._task_card.to_dict()])
         task_card_datastore.close()
 
-    def _init_dataloader(self) -> None:
+    def _init_dataloader(self, seed_datastore: Optional[BaseDatastore] = None) -> None:
         """Initialize datastore object for storing all SDG data."""
 
         # init seed datastore for dataloader
@@ -218,8 +219,10 @@ class SdgTask:
             **self._seed_datastore_cfg,
             "restart": False,
         }
-        seed_datastore = get_datastore(
-            self._seed_datastore_cfg.get(TYPE_KEY), **seed_ds_kwargs
+        seed_datastore = (
+            get_datastore(self._seed_datastore_cfg.get(TYPE_KEY), **seed_ds_kwargs)
+            if seed_datastore is None
+            else seed_datastore
         )
 
         # init dataloader state datastore (should be same as base datastore)

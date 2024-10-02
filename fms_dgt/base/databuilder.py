@@ -251,6 +251,7 @@ class DataBuilder(ABC):
                             self._max_stalled_requests,
                         )
                     completed.append(task)
+                    task.finish()
 
             # redefine generating and postprocessing
             generating = [task for task in postprocessing if task not in completed]
