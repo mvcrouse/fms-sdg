@@ -384,6 +384,9 @@ class TransformationDataBuilder(DataBuilder):
         self.execute_postprocessing(tasks)
         sdg_logger.info("Postprocessing completed")
 
+        for task in tasks:
+            task.finish()
+
         generate_duration = time.time() - generate_start
         sdg_logger.info("Generation took %.2fs", generate_duration)
 
