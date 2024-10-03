@@ -281,12 +281,12 @@ def read_data(data):
     return tasks
 
 
-def load_joint_config(yaml_path: str):
+def load_orchestration_config(yaml_path: str):
 
     with open(yaml_path, "r") as f:
         config: dict = yaml.full_load(f)
 
-    data_paths, db_overrides, task_overrides = [], dict(), dict()
+    data_paths, db_overrides, task_overrides, dependencies = [], dict(), dict(), dict()
 
     for k, v in config.items():
         if k in ["databuilders", "tasks"]:
@@ -300,16 +300,18 @@ def load_joint_config(yaml_path: str):
                 task_overrides = v
         elif k == "task_files":
             if type(v) != list:
-                raise ValueError(
-                    f"'task_files' field in config must be provided as a list"
-                )
+                raise ValueError(f"'{k}' field in config must be provided as a list")
             data_paths = v
+        elif k == "dependencies":
+            if type(v) != dict:
+                raise ValueError(f"'{k}' field in config must be provided as a dict")
+            dependencies = v
         else:
             raise ValueError(
                 f"Config must only specify 'databuilders' and 'tasks' fields"
             )
 
-    return data_paths, db_overrides, task_overrides
+    return data_paths, db_overrides, task_overrides, dependencies
 
 
 def load_nested_paths(inp: Dict, base_dir: str = None):

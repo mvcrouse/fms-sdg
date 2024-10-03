@@ -1,5 +1,4 @@
 task_name: cot_compositional_transform
-data_builder: db_composition
 task_files:
   - data/generation/code/apis/glaive/detection/single_api/qna.yaml
   - data/generation/code/apis/glaive/detection/yes_no/qna.yaml
