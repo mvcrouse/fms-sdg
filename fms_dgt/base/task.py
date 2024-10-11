@@ -33,14 +33,6 @@ class SdgData(abc.ABC):
         return asdict(self)
 
 
-@dataclass
-class InputOutputData(SdgData):
-    """This class is intended to hold data that can directly be used for tuning a model"""
-
-    input: str
-    output: str
-
-
 class SdgTask:
     """This class is intended to hold general task information"""
 
@@ -313,7 +305,7 @@ class SdgTask:
         """
         return self.OUTPUT_DATA_TYPE(**kwargs)
 
-    def instantiate_instruction(self, data: OUTPUT_DATA_TYPE) -> InputOutputData:
+    def instantiate_instruction(self, data: OUTPUT_DATA_TYPE) -> Dict:
         """Instantiates an instruction-tuning pair from output data instance.
 
         Args:
