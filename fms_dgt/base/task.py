@@ -1,20 +1,21 @@
 # Standard
 from dataclasses import asdict, dataclass
-from typing import Any, Dict, List, Mapping, Optional, TypeVar, Union
+from typing import Any, Dict, List, Optional, TypeVar, Union
 import abc
+import os
 import random
 
 # Local
+from fms_dgt.base.datastore import BaseDatastore, DatastoreDataType
 from fms_dgt.base.registry import get_dataloader, get_datastore
-from fms_dgt.dataloaders.default import DefaultDataloader
-from fms_dgt.datastores.default import DefaultDatastore
+from fms_dgt.base.task_card import TaskRunCard
+from fms_dgt.constants import TYPE_KEY
 from fms_dgt.utils import group_data_by_attribute
 
 DEFAULT_OUTPUT_DIR = "output"
-
-
-NAME_KEY = "name"
-TYPE_KEY = "type"
+DEFAULT_MACHINE_BATCH_SIZE = 10
+DEFAULT_SEED_BATCH_SIZE = 100
+DEFAULT_NUM_OUTPUTS = 2
 
 
 @dataclass
@@ -23,7 +24,7 @@ class SdgData(abc.ABC):
 
     task_name: str
 
-    def to_output_dict(self) -> Dict:
+    def to_dict(self) -> Dict:
         """Returns output dictionary representation of dataclass. Designed to be overridden with custom logic.
 
         Returns:
@@ -50,38 +51,39 @@ class SdgTask:
 
     def __init__(
         self,
-        name: str,
+        task_name: str,
         task_description: str,
         created_by: str,
         data_builder: str,
+        task_card: TaskRunCard,
         instruction_format: Optional[Dict[str, str]] = None,
-        output_dir: Optional[str] = "output",
+        save_formatted_output: Optional[bool] = False,
+        output_dir: Optional[str] = DEFAULT_OUTPUT_DIR,
         output_format: Optional[str] = "jsonl",
         datastore: Optional[Dict] = None,
+        seed_datastore: Optional[Dict] = None,
         restart_generation: Optional[bool] = False,
-        builder_cfg: Optional[Mapping] = None,
-        builder_dir: Optional[str] = None,
-        file_path: Optional[str] = None,
         dataloader: Optional[Dict] = None,
-        seed_batch_size: Optional[int] = None,
-        machine_batch_size: Optional[int] = None,
+        seed_batch_size: Optional[int] = DEFAULT_SEED_BATCH_SIZE,
+        machine_batch_size: Optional[int] = DEFAULT_MACHINE_BATCH_SIZE,
         seed_examples: Optional[List[Any]] = None,
-        num_outputs_to_generate: Optional[int] = None,
+        num_outputs_to_generate: Optional[int] = DEFAULT_NUM_OUTPUTS,
     ):
         """Initializes the Task object
 
         Args:
-            name (str): The name of the Task object.
+            task_name (str): The name of the Task object.
             task_description (str): A description of the SDG task is designed to solve.
             created_by (str): The name of the individual / group who created the code assistant.
             data_builder (str): The name of the data builder that should be used to process this task.
+            task_card (TaskCard): The task card containing all experiment information
             instruction_format (Optional[Dict[str, str]]): A dictionary template that can be used to translate intermediate data objects to instruction-tuning pairs
+            save_formatted_output (Optional[bool]): A boolean indicating whether to save outputs that have been reformatted
             output_dir (Optional[str]): The directory where the generated outputs will be saved.
             output_format (Optional[str]): The format of the file where generated outputs are saved.
             datastore (Optional[Dict]): A dictionary containing the configuration for the datastore.
+            seed_datastore (Optional[Dict]): A dictionary containing the configuration for the seed datastore.
             restart_generation (Optional[bool]): A boolean indicating whether to restart generation from scratch.
-            builder_cfg (Optional[Mapping]): A dictionary containing the configuration for the data builder.
-            file_path (Optional[str]): The path to the task file.
             dataloader (Optional[Dict]): A dictionary containing the configuration for the dataloader.
             seed_batch_size (Optional[int]): The batch size used for seed examples.
             machine_batch_size (Optional[int]): The batch size used for machine examples.
@@ -89,89 +91,67 @@ class SdgTask:
             num_outputs_to_generate (Optional[int]): The number of outputs to generate.
         """
 
-        self._name = name
+        self._name = task_name
         self._task_description = task_description
         self._created_by = created_by
         self._data_builder = data_builder
+        self._task_card = task_card
         self._restart_generation = restart_generation
-        self._file_path = file_path
-        self._builder_cfg = builder_cfg
-        self._builder_dir = builder_dir
         self._seed_examples = seed_examples
         self._num_outputs_to_generate = num_outputs_to_generate
         self._output_format = output_format
         self._output_dir = output_dir
         self._instruction_format = instruction_format
+        self._save_formatted_output = save_formatted_output
 
-        # dataloader params
-        self._dataloader_cfg = dataloader
+        self._store_name = self._task_card.task_name
 
-        # datastore params
-        self._datastore_cfg = datastore
+        self._post_proc_id = 0
 
         self.machine_data = []
 
-        self._seed_batch_size = (
-            seed_batch_size if seed_batch_size is not None else 10000000
-        )
+        self._seed_batch_size = seed_batch_size
         if self._seed_batch_size < 0:
             raise ValueError(
                 f"Cannot have negative value of {self._seed_batch_size} for seed_batch_size parameter"
             )
 
         self._machine_batch_size = (
-            machine_batch_size if machine_batch_size is not None else 10000000
+            machine_batch_size if machine_batch_size is not None else 100
         )
         if self._machine_batch_size < 0:
             raise ValueError(
                 f"Cannot have negative value of {self._machine_batch_size} for machine_batch_size parameter"
             )
 
-        self.init_datastore()
-        self.init_dataloader()
+        # dataloader params
+        self._dataloader_cfg = (
+            dataloader if dataloader is not None else {TYPE_KEY: "default"}
+        )
 
-    def init_datastore(self) -> None:
-        """Initialize datastore object for storing all SDG data."""
-
-        ds_kwargs = {
-            "store_name": self._name,
-            "data_builder": self._data_builder,
+        # datastore params
+        base_store_cfg = {
             "restart": self._restart_generation,
-            "file_path": self._file_path,
-            "builder_cfg": self._builder_cfg,
-            "builder_dir": self._builder_dir,
-            "seed_examples": self._seed_examples,
             "output_dir": self._output_dir,
-            "output_format": self._output_format,
+            "task_card": self._task_card,
         }
-        if self._datastore_cfg is None:
-            self._datastore = DefaultDatastore(
-                **ds_kwargs,
-            )
-        else:
-            assert (
-                TYPE_KEY in self._datastore_cfg
-            ), f"Must specify data store type with '{TYPE_KEY}' key"
-            self._datastore = get_datastore(
-                self._datastore_cfg.get(TYPE_KEY),
-                **{**ds_kwargs, **self._datastore_cfg},
-            )
+        self._datastore_cfg = {
+            **base_store_cfg,
+            **(datastore if datastore is not None else {TYPE_KEY: "default"}),
+        }
+        self._seed_datastore_cfg = {
+            **base_store_cfg,
+            **(seed_datastore if seed_datastore is not None else {TYPE_KEY: "default"}),
+        }
+        self._task_card_datastore_cfg = {**base_store_cfg, **self._datastore_cfg}
 
-    def init_dataloader(self):
-        """Initialize the dataloader that passes all examples to SDG process."""
+        self._dataloader_state_datastore: BaseDatastore = None
+        self._datastore: BaseDatastore = None
+        self._final_datastore: BaseDatastore = None
 
-        if self._dataloader_cfg is None:
-            self._dataloader = DefaultDataloader(datastore=self._datastore)
-        else:
-            assert TYPE_KEY in self._dataloader_cfg, (
-                "Must specify dataloader type with %s key",
-                TYPE_KEY,
-            )
-            self._dataloader = get_dataloader(
-                self._dataloader_cfg.get(TYPE_KEY),
-                datastore=self._datastore,
-                **self._dataloader_cfg,
-            )
+        self._save_task_card()
+        self._init_dataloader()
+        self._init_datastores()
 
     @property
     def name(self) -> str:
@@ -192,8 +172,122 @@ class SdgTask:
         return self._task_description
 
     @property
-    def datastore(self):
+    def task_card(self) -> TaskRunCard:
+        """Returns the task card.
+
+        Returns:
+            TaskRunCard: Task card
+        """
+        return self._task_card
+
+    @property
+    def datastore(self) -> BaseDatastore:
+        """Returns the datastore of the class.
+
+        Returns:
+            BaseDatastore: Datastore
+        """
         return self._datastore
+
+    def _save_task_card(self):
+        """Saves experiment card to datastore."""
+
+        exp_ds_kwargs = {
+            "store_name": os.path.join(self._store_name, "task_card"),
+            "data_type": DatastoreDataType.CARD,
+            **self._task_card_datastore_cfg,
+        }
+        task_card_datastore = get_datastore(
+            exp_ds_kwargs.get(TYPE_KEY), **exp_ds_kwargs
+        )
+
+        prev_card = None
+        if not self._restart_generation:
+            prev_task_cards: List[Dict] = task_card_datastore.load_data()
+            if prev_task_cards:
+                prev_card = TaskRunCard(**prev_task_cards[-1])
+                self._task_card.run_id = prev_card.run_id
+
+        assert (
+            self._task_card.run_id is not None
+        ), "TaskCard.run_id cannot be set to None"
+
+        task_card_datastore.save_data([self._task_card.to_dict()])
+        task_card_datastore.close()
+
+    def _init_dataloader(self) -> None:
+        """Initialize datastore object for storing all SDG data."""
+
+        # init seed datastore for dataloader
+        seed_ds_kwargs = {
+            "store_name": os.path.join(self._store_name, "seed_data"),
+            "data": self._seed_examples,
+            "data_type": DatastoreDataType.SEED,
+            **self._seed_datastore_cfg,
+            "restart": False,
+        }
+        seed_datastore = get_datastore(
+            self._seed_datastore_cfg.get(TYPE_KEY), **seed_ds_kwargs
+        )
+
+        # init dataloader state datastore (should be same as base datastore)
+        dls_ds_kwargs = {
+            "store_name": os.path.join(self._store_name, "dataloader_state"),
+            "data_type": DatastoreDataType.STATE,
+            **self._datastore_cfg,
+        }
+        self._dataloader_state_datastore = get_datastore(
+            self._datastore_cfg.get(TYPE_KEY), **dls_ds_kwargs
+        )
+
+        # init dataloader itself
+        self._dataloader = get_dataloader(
+            self._dataloader_cfg.get(TYPE_KEY),
+            data=seed_datastore.load_data(),
+            **self._dataloader_cfg,
+        )
+
+    def _init_datastores(self):
+
+        # init input/output datastore
+        io_ds_kwargs = {
+            "store_name": os.path.join(self._store_name, "data"),
+            "data_type": DatastoreDataType.TASK_DATA,
+            **self._datastore_cfg,
+        }
+        self._datastore = get_datastore(
+            self._datastore_cfg.get(TYPE_KEY), **io_ds_kwargs
+        )
+
+        # set post-proc datastore
+        self._pp_datastore = self._datastore
+
+        # init final output datastore (should be same as input/output datastore)
+        final_ds_kwargs = {
+            "store_name": os.path.join(self._store_name, "final_data"),
+            "data_type": DatastoreDataType.FINAL_DATA,
+            **self._datastore_cfg,
+        }
+        self._final_datastore = get_datastore(
+            self._datastore_cfg.get(TYPE_KEY), **final_ds_kwargs
+        )
+
+    def set_postprocess_datastore(self, datastore: BaseDatastore):
+        self._pp_datastore = datastore
+
+    def make_postprocess_datastore(self):
+        # init post processing datastore
+        self._post_proc_id += 1
+        pp_ds_kwargs = {
+            "store_name": os.path.join(
+                self._store_name, f"postproc_data_{self._post_proc_id}"
+            ),
+            "data_type": DatastoreDataType.POST_PROC_DATA,
+            "schema": list(self.OUTPUT_DATA_TYPE.__dataclass_fields__),
+            **self._datastore_cfg,
+            "restart": True,
+        }
+        return get_datastore(self._datastore_cfg.get(TYPE_KEY), **pp_ds_kwargs)
 
     def instantiate_input_example(self, **kwargs: Any) -> INPUT_DATA_TYPE:
         """Instantiate an input example for this task. Designed to be overridden with custom initialization.
@@ -228,17 +322,20 @@ class SdgTask:
         Returns:
             Dict: Dictionary representing an instruction-tuning pair.
         """
-        if type(data) == InputOutputData:
-            return data.to_output_dict()
 
-        data = asdict(data)
+        assert (
+            self._instruction_format is not None
+        ), f"'instruction_format' cannot be None in method 'instantiate_instruction'"
+
+        data = data if type(data) == dict else asdict(data)
         output = dict(self._instruction_format)
         for k in output.keys():
             for ds_k, ds_v in data.items():
                 inp_key = "{{" + ds_k + "}}"
                 if inp_key in output[k]:
                     output[k] = output[k].replace(inp_key, str(ds_v))
-        return InputOutputData(**output).to_output_dict()
+
+        return output
 
     def get_example(self) -> SdgData:
         """Returns single example from dataloader.
@@ -295,16 +392,17 @@ class SdgTask:
         if type(new_data) != list:
             new_data: List[SdgData] = [new_data]
 
-        to_save = [d if type(d) == dict else d.to_output_dict() for d in new_data]
+        to_save = [d if type(d) == dict else d.to_dict() for d in new_data]
         self._datastore.save_data(to_save)
 
     def load_intermediate_data(self) -> List[SdgData]:
-        """Loads intermediate data produced during SDG (will be used to resume SDG).
+        """Loads intermediate data produced during SDG (will be used to resume SDG). This function loads the data from _pp_datastore, which is either
+            the latest datastore defined during post processing or the original input/output datastore.
 
         Returns:
             List[SdgData]: List of SdgData that has been loaded
         """
-        loaded_data = self._datastore.load_data()
+        loaded_data = self._pp_datastore.load_data()
         if loaded_data:
             self.machine_data = [
                 self.instantiate_output_example(**d) for d in loaded_data
@@ -312,45 +410,34 @@ class SdgTask:
 
     def save_final_data(self) -> None:
         """Saves final instruction-tuning data that can be used directly for training."""
-        if (
-            self._instruction_format is not None
-            or self.OUTPUT_DATA_TYPE == InputOutputData
-        ):
-            loaded_data = self._datastore.load_data()
-            if loaded_data:
-                for d in loaded_data:
-                    instruction = self.instantiate_instruction(
-                        self.instantiate_output_example(**d)
-                    )
-                    self._datastore.save_instruction_data([instruction])
+        if self._save_formatted_output:
+            loaded_data = self._pp_datastore.load_data() or []
+            to_add = [
+                self.instantiate_instruction(self.instantiate_output_example(**d))
+                for d in loaded_data
+            ]
+            if to_add:
+                self._final_datastore.save_data(to_add)
 
-    def load_final_data(self) -> List[InputOutputData]:
-        loaded_data = self._datastore.load_instruction_data()
-        loaded_data = (
-            [InputOutputData(**instr) for instr in loaded_data] if loaded_data else []
+    def save_dataloader_state(self):
+        self._dataloader_state_datastore.save_data(
+            [{"state": self._dataloader.get_state()}]
         )
-        return loaded_data
 
-    def save_dataloader_state(self) -> None:
-        """Saves state of data loader to enable resumption of SDG process later on."""
-        self._datastore.save_state(self._dataloader.get_state())
+    def load_dataloader_state(self):
+        prev_state = self._dataloader_state_datastore.load_data()
+        if prev_state:
+            self._dataloader.set_state(prev_state[-1]["state"])
 
-    def load_dataloader_state(self) -> None:
-        """Loads state of data loader to enable resumption of SDG process."""
-        if not self._restart_generation:
-            self._dataloader.set_state(self._datastore.load_state())
+    def finish(self) -> None:
+        """Method for wrapping up task execution. Called after `is_complete` signals task has completed"""
 
-    def save_task(self) -> None:
-        """Saves task specification to datastore."""
-        self._datastore.save_task()
+        self.save_final_data()
 
-    def load_task(self) -> Any:
-        """Loads task specification from datastore."""
-        return self._datastore.load_task()
-
-    def save_log_data(self) -> None:
-        """Saves any Logging information to the datastore."""
-        return self._datastore.save_log_data()
+        # close datastores
+        self._dataloader_state_datastore.close()
+        self._datastore.close()
+        self._final_datastore.close()
 
 
 ###
@@ -362,23 +449,22 @@ class TransformTask(SdgTask):
     """TransformTask is a subclass of SdgTask that has default values that are more conducive to transformation tasks."""
 
     def __init__(
-        self, *args, seed_batch_size: int = 10, machine_batch_size: int = 0, **kwargs
+        self,
+        *args,
+        dataloader: Optional[Dict] = None,
+        seed_batch_size: int = 10,
+        machine_batch_size: int = 0,
+        **kwargs,
     ):
+        if dataloader is None:
+            dataloader = {TYPE_KEY: "default", "loop_over_data": False}
         super().__init__(
             *args,
+            dataloader=dataloader,
             seed_batch_size=seed_batch_size,
             machine_batch_size=machine_batch_size,
             **kwargs,
         )
-
-    def init_dataloader(self):
-        """Initializes dataloader object for transform tasks."""
-        if self._dataloader_cfg is None:
-            self._dataloader = DefaultDataloader(
-                datastore=self._datastore, loop_over_data=False
-            )
-        else:
-            super().init_dataloader()
 
 
 T = TypeVar("T")

@@ -2,12 +2,10 @@
 from typing import Any, Callable, Dict, List, Optional
 
 # Local
-from fms_dgt.base.block import DATASET_TYPE
 from fms_dgt.base.registry import get_block, register_block
 from fms_dgt.blocks.generators.llm import LMGenerator
 from fms_dgt.blocks.validators import BaseValidatorBlock
-
-TYPE_KEY = "type"
+from fms_dgt.constants import DATASET_TYPE, TYPE_KEY
 
 
 @register_block("llm_judge")
@@ -47,23 +45,30 @@ class LMJudgeValidator(BaseValidatorBlock):
             **kwargs,
         )
 
-        judge_outputs, filtered = [], []
+        judge_outputs, to_save = [], []
         for llm_output in llm_outputs:
             args, kwargs = self.get_args_kwargs(
                 llm_output, arg_fields=arg_fields, kwarg_fields=kwarg_fields
             )
             success_func = args[0]
 
-            lm_res = self.get_result(llm_output, result_field)
+            lm_res = self._llm_generator.get_result(llm_output, lm_result_field)
             new_result = success_func(lm_res)
             if new_result or not self._filter_invalids:
                 self.write_result(llm_output, new_result, result_field=result_field)
                 judge_outputs.append(llm_output)
 
             if not new_result:
-                filtered.append((args, kwargs))
+                iter_args = arg_fields or self._arg_fields or []
+                to_save.append(
+                    {
+                        **dict(zip(iter_args, args)),
+                        **kwargs,
+                        result_field: new_result,
+                    }
+                )
 
-        self.save_filtered(filtered)
+        self.save_data(to_save)
 
         return judge_outputs
 

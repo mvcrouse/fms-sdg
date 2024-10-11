@@ -181,8 +181,8 @@ def load_yaml_config(yaml_path=None, yaml_config=None, yaml_dir=None, mode="full
         final_yaml_config = dict()
         to_add = init_include(to_include)
         if type(to_include) == list:
-            for entry in to_add:
-                final_yaml_config.update(entry)
+            new_entry = merge_dictionaries(*to_add)
+            final_yaml_config.update(new_entry)
         elif type(to_include) == dict:
             final_yaml_config.update(to_add)
         else:
@@ -257,24 +257,18 @@ def read_data_file(file_path: str):
         contents = load_yaml_config(file_path)
 
         if not contents:
-            sdg_logger.warn("Skipping %s because it is empty!", file_path)
+            sdg_logger.warning("Skipping %s because it is empty!", file_path)
             return None
 
         if file_path.startswith("." + os.sep):
             file_path = file_path[len("." + os.sep) :]
 
         # get seed instruction data
-        task_name = "->".join(sanitize_path(os.path.dirname(file_path)).split(os.sep))
-        data_builder = contents.get("data_builder", "simple")
-        created_by = contents.get("created_by", "")
-        seed_examples = contents.pop("seed_examples", [dict()])
         task = {
             **{
-                "name": task_name,
-                "data_builder": data_builder,
-                "created_by": created_by,
-                "seed_examples": seed_examples,
-                "file_path": file_path,
+                "data_builder": "simple",
+                "created_by": "",
+                "seed_examples": [],
             },
             **contents,
         }
@@ -305,24 +299,30 @@ def load_joint_config(yaml_path: str):
     with open(yaml_path, "r") as f:
         config: dict = yaml.full_load(f)
 
-    data_paths, config_overrides = [], []
+    data_paths, db_overrides, task_overrides = [], dict(), dict()
+
     for k, v in config.items():
-        if k == "databuilders":
+        if k in ["databuilders", "tasks"]:
             if type(v) != dict:
                 raise ValueError(
-                    f"'databuilders' field in config must be provided as a dictionary where keys are the names of databuilders to override"
+                    f"'{k}' field in config must be provided as a dictionary where keys are the names of databuilders to override"
                 )
-            config_overrides = v
-        elif k == "tasks":
+            if k == "databuilders":
+                db_overrides = v
+            else:
+                task_overrides = v
+        elif k == "task_files":
             if type(v) != list:
-                raise ValueError(f"'tasks' field in config must be provided as a list")
+                raise ValueError(
+                    f"'task_files' field in config must be provided as a list"
+                )
             data_paths = v
         else:
             raise ValueError(
                 f"Config must only specify 'databuilders' and 'tasks' fields"
             )
 
-    return data_paths, config_overrides
+    return data_paths, db_overrides, task_overrides
 
 
 def load_nested_paths(inp: Dict, base_dir: str = None):

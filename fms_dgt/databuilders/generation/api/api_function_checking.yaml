@@ -12,8 +12,7 @@ blocks:
     filter: true
     datastore:
       type: default
-      output_dir: output/filtered_data
-      store_name: api_function_checking
+      output_dir: logs/filtered_data
       restart: true
   - name: val2
     type: rouge_scorer

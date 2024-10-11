@@ -4,11 +4,9 @@ import os
 import re
 
 # Local
-from fms_dgt.base.block import BaseBlock
 from fms_dgt.base.dataloader import BaseDataloader
 from fms_dgt.base.datastore import BaseDatastore
 from fms_dgt.base.resource import BaseResource
-from fms_dgt.blocks.generators.llm import CachingLM, LMGenerator
 from fms_dgt.utils import dynamic_import
 
 # TODO: better strategy needed, but this will eliminate some of the confusing errors people get when registering a new class.
@@ -98,10 +96,6 @@ def register_block(*names):
 
     def decorate(cls):
         for name in names:
-            assert issubclass(
-                cls, BaseBlock
-            ), f"Block '{name}' ({cls.__name__}) must extend BaseBlock class"
-
             assert (
                 name not in BLOCK_REGISTRY
             ), f"Block named '{name}' conflicts with existing block! Please register with a non-conflicting alias instead."
@@ -113,6 +107,10 @@ def register_block(*names):
 
 
 def get_block(block_name, *args: Any, **kwargs: Any):
+
+    # Local
+    from fms_dgt.blocks.generators.llm import CachingLM, LMGenerator
+
     if block_name not in BLOCK_REGISTRY:
         _dynamic_registration_import("register_block", block_name)
 
@@ -225,7 +223,7 @@ def register_dataloader(*names):
     return decorate
 
 
-def get_dataloader(dataloader_name, *args: Any, **kwargs: Any):
+def get_dataloader(dataloader_name, *args: Any, **kwargs: Any) -> BaseDataloader:
     if dataloader_name not in DATALOADER_REGISTRY:
         _dynamic_registration_import("register_dataloader", dataloader_name)
 
@@ -264,7 +262,7 @@ def register_datastore(*names):
     return decorate
 
 
-def get_datastore(datastore_name, *args: Any, **kwargs: Any):
+def get_datastore(datastore_name, *args: Any, **kwargs: Any) -> BaseDatastore:
     if datastore_name not in DATASTORE_REGISTRY:
         _dynamic_registration_import("register_datastore", datastore_name)
 
