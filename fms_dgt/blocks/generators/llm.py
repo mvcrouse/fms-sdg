@@ -289,7 +289,10 @@ class CachingLM:
 
     def __getattr__(self, attr):
         lm_attr = getattr(self.lm, attr)
+
         if not callable(lm_attr):
+            return lm_attr
+        elif attr in ["init_model", "release_model"]:
             return lm_attr
 
         def fn(requests: List[Instance]):
