@@ -24,7 +24,7 @@ def generate_data(
     config_path: Optional[str] = None,
     include_builder_paths: Optional[List[str]] = None,
     build_id: Optional[str] = None,
-    parallelize: Optional[bool] = False,
+    parallel_workers: Optional[int] = None,
 ):
     """Generate data for a set of tasks using their respective data builders
 
@@ -35,7 +35,7 @@ def generate_data(
         config_path (Optional[str], optional): A path to a configuration file.
         include_builder_paths (Optional[List[str]], optional): A list of paths to search for data builders.
         build_id (Optional[str], optional): An ID to associate with all of the tasks executed in this run.
-        parallelize (Optional[bool], optional): Parallelize databuilder generation up to the resource limits of machine.
+        parallel_workers (Optional[int], optional): Parallelize databuilder generation up to N workers
     """
     data_paths = data_paths or []
     builder_overrides = None
@@ -97,7 +97,7 @@ def generate_data(
     )
 
     # initialize ray here
-    if parallelize:
+    if parallel_workers is not None:
         # TODO: data
         """ray.init(address: str | None = None, *, num_cpus: int | None = None, num_gpus: int | None = None, resources: Dict[str, float] | None = None, labels: Dict[str, str] | None = None, object_store_memory: int | None = None, local_mode: bool = False, ignore_reinit_error: bool = False, include_dashboard: bool | None = None, dashboard_host: str = '127.0.0.1', dashboard_port: int | None = None, job_config: ray.job_config.JobConfig = None, configure_logging: bool = True, logging_level: int = 'info', logging_format: str | None = None, logging_config: LoggingConfig | None = None, log_to_driver: bool | None = None, namespace: str | None = None, runtime_env: Dict[str, Any] | RuntimeEnv | None = None, storage: str | None = None, **kwargs)"""
         ray.init()
@@ -146,9 +146,9 @@ def generate_data(
             err = None
             try:
                 # first see if databuilder is loaded by default
-                if parallelize:
+                if parallel_workers is not None:
                     data_builder = ParallelDataBuilder(
-                        builder_name, **all_builder_kwargs
+                        builder_name, parallel_workers, **all_builder_kwargs
                     )
                 else:
                     data_builder: DataBuilder = get_data_builder(
@@ -159,9 +159,9 @@ def generate_data(
 
             if f"Attempted to load data builder '{builder_name}'" in str(err):
                 utils.import_builder(builder_dir)
-                if parallelize:
+                if parallel_workers is not None:
                     data_builder = ParallelDataBuilder(
-                        builder_name, **all_builder_kwargs
+                        builder_name, parallel_workers, **all_builder_kwargs
                     )
                 else:
                     data_builder: DataBuilder = get_data_builder(

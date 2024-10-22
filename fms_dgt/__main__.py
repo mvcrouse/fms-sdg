@@ -45,8 +45,8 @@ def add_base_args(parser: argparse.ArgumentParser):
         help="Build ID to identify SDG job",
     )
     group.add_argument(
-        "--parallelize",
-        action="store_true",
+        "--parallel-workers",
+        type=int,
         help="Parallelize databuilder execution up to resource limits of machine.",
     )
     return group

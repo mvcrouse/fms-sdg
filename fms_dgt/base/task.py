@@ -60,6 +60,7 @@ class SdgTask:
         machine_batch_size: Optional[int] = DEFAULT_MACHINE_BATCH_SIZE,
         seed_examples: Optional[List[Any]] = None,
         num_outputs_to_generate: Optional[int] = DEFAULT_NUM_OUTPUTS,
+        is_worker: Optional[bool] = False,
     ):
         """Initializes the Task object
 
@@ -116,34 +117,40 @@ class SdgTask:
                 f"Cannot have negative value of {self._machine_batch_size} for machine_batch_size parameter"
             )
 
-        # dataloader params
-        self._dataloader_cfg = (
-            dataloader if dataloader is not None else {TYPE_KEY: "default"}
-        )
+        if not is_worker:
 
-        # datastore params
-        base_store_cfg = {
-            "restart": self._restart_generation,
-            "output_dir": self._output_dir,
-            "task_card": self._task_card,
-        }
-        self._datastore_cfg = {
-            **base_store_cfg,
-            **(datastore if datastore is not None else {TYPE_KEY: "default"}),
-        }
-        self._seed_datastore_cfg = {
-            **base_store_cfg,
-            **(seed_datastore if seed_datastore is not None else {TYPE_KEY: "default"}),
-        }
-        self._task_card_datastore_cfg = {**base_store_cfg, **self._datastore_cfg}
+            # dataloader params
+            self._dataloader_cfg = (
+                dataloader if dataloader is not None else {TYPE_KEY: "default"}
+            )
 
-        self._dataloader_state_datastore: BaseDatastore = None
-        self._datastore: BaseDatastore = None
-        self._final_datastore: BaseDatastore = None
+            # datastore params
+            base_store_cfg = {
+                "restart": self._restart_generation,
+                "output_dir": self._output_dir,
+                "task_card": self._task_card,
+            }
+            self._datastore_cfg = {
+                **base_store_cfg,
+                **(datastore if datastore is not None else {TYPE_KEY: "default"}),
+            }
+            self._seed_datastore_cfg = {
+                **base_store_cfg,
+                **(
+                    seed_datastore
+                    if seed_datastore is not None
+                    else {TYPE_KEY: "default"}
+                ),
+            }
+            self._task_card_datastore_cfg = {**base_store_cfg, **self._datastore_cfg}
 
-        self._save_task_card()
-        self._init_dataloader()
-        self._init_datastores()
+            self._dataloader_state_datastore: BaseDatastore = None
+            self._datastore: BaseDatastore = None
+            self._final_datastore: BaseDatastore = None
+
+            self._save_task_card()
+            self._init_dataloader()
+            self._init_datastores()
 
     @property
     def name(self) -> str:

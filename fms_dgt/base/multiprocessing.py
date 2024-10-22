@@ -3,12 +3,15 @@ from typing import Dict, Iterable, List, Mapping, Type, Union
 
 # Third Party
 from ray.actor import ActorHandle
+from ray.experimental.state.api import list_actors
 import ray
 
 # Local
 from fms_dgt.base.databuilder import DataBuilder, DataBuilderConfig
-from fms_dgt.base.registry import get_data_builder_class
+from fms_dgt.base.registry import get_block_class, get_data_builder_class
 from fms_dgt.base.task import SdgData, SdgTask
+from fms_dgt.blocks.postprocessors import BasePostProcessingBlock
+from fms_dgt.constants import BLOCKS_KEY, NAME_KEY
 from fms_dgt.utils import sdg_logger
 
 
@@ -18,15 +21,18 @@ class ParallelDataBuilder(DataBuilder):
     def __init__(
         self,
         builder_name: str,
+        parallel_workers: int,
         *args,
         config: Union[Mapping, DataBuilderConfig] = None,
+        task_kwargs: List[dict] = None,
         **kwargs,
     ) -> None:
         """Initializes data builder object.
 
         Args:
             builder_name (str): Databuilder to parallelize
-            config (dict): Contains all settings that would be passed to the databuilder.
+            parallel_workers (int): Number of workers to parallelize across
+            config (dict): Contains all settings that would be passed to the databuilder
         """
 
         self._actors: List[ActorHandle] = []
@@ -37,19 +43,35 @@ class ParallelDataBuilder(DataBuilder):
             for attr in ["execute_tasks", "call_with_task_list"]:
                 if getattr(DataBuilder, attr) != getattr(db_class, attr):
                     raise ValueError(
-                        f"Method [{attr}] cannot be defined in class {db_class} if --parallelize flag is used"
+                        f"Method [{attr}] cannot be defined in class {db_class} if --parallel-workers is used"
                     )
 
-        for _ in range(2):
-            actor = ray.remote(num_cpus=1, num_gpus=1)(db_class).remote(
-                *args, **{"config": config, **kwargs}
+        # TODO: relax assumption that we're working with one node
+        node = ray.nodes()[0]
+        worker_cpus = int(node["Resources"]["CPU"] // parallel_workers)
+        worker_gpus = int(node["Resources"]["GPU"] // parallel_workers)
+
+        for _ in range(parallel_workers):
+            actor = ray.remote(num_cpus=worker_cpus, num_gpus=worker_gpus)(
+                db_class
+            ).remote(
+                *args,
+                **{
+                    "config": config,
+                    "task_kwargs": [{**tk, "is_worker": True} for tk in task_kwargs],
+                    **kwargs,
+                },
             )
             self._actors.append(actor)
 
-        # we don't want to initialize blocks for the synchronization process
-        config["blocks"] = []
+        # only initialize postprocessing blocks for the synchronization process
+        config[BLOCKS_KEY] = [
+            block
+            for block in config[BLOCKS_KEY]
+            if isinstance(get_block_class(block[NAME_KEY], BasePostProcessingBlock))
+        ]
         self._db = self._make_dynamic_subclass(
-            db_class, *args, **{"config": config, **kwargs}
+            db_class, *args, **{"config": config, "task_kwargs": task_kwargs, **kwargs}
         )
 
     def _make_dynamic_subclass(

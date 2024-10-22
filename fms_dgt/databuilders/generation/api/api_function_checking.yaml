@@ -6,14 +6,17 @@ blocks:
     temperature: 0.5
     max_new_tokens: 1024
     min_new_tokens: 1
-    model_id_or_path: ibm-granite/granite-8b-code-instruct # mistralai/mixtral-8x7b-instruct-v01
+    # model_id_or_path: mistralai/mixtral-8x7b-instruct-v01
+    # model_id_or_path: /dccstor/cfm-tst/fms-sdg/.cache/huggingface/hub/models--mistralai--Mixtral-8x7B-Instruct-v0.1/snapshots/e5768b9fe0424b6addfd197a7f52c56712de0c47/
+    model_id_or_path: ibm-granite/granite-8b-code-instruct
+    tensor_parallel_size: 1
   - name: val1
     type: api_function_checking
     filter: true
-    datastore:
-      type: default
-      output_dir: logs/filtered_data
-      restart: true
+    # datastore:
+    #   type: default
+    #   output_dir: logs/filtered_data
+    #   restart: true
   - name: val2
     type: rouge_scorer
     filter: true
