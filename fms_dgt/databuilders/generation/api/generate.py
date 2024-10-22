@@ -1,5 +1,5 @@
 # Standard
-from typing import Any, Dict, Iterable, List, Optional
+from typing import Any, Dict, List, Optional
 import random
 import time
 
@@ -40,33 +40,22 @@ class ApiDataBuilder(DataBuilder):
     val1: APIGenSpecValidator
     val2: RougeDedupValidator
 
-    def call_with_task_list(
-        self, request_idx: int, tasks: List[ApiSdgTask]
-    ) -> Iterable[ApiSdgData]:
-
-        data_pool = [e for task in tasks for e in task.get_batch_examples()]
-        task_api_specifications = dict(
-            {task.name: task.all_api_specifications for task in tasks}
-        )
-        args = [request_idx, task_api_specifications, data_pool]
-        kwargs = dict()
-        return self(*args, **kwargs)
-
     def __call__(
         self,
         request_idx: int,
-        all_api_specification_groups: Dict[str, Dict],
         instruction_data: List[ApiSdgData],
     ) -> List[ApiSdgData]:
+
+        task_api_specifications = dict(
+            {task.name: task.all_api_specifications for task in self.tasks}
+        )
 
         # first generate new data
         instruction_data = instruction_data + []
         random.shuffle(instruction_data)
         gen_inputs: List[Dict] = []
         for task_data in group_data_by_task(instruction_data):
-            api_specification_groups = all_api_specification_groups[
-                task_data[0].task_name
-            ]
+            api_specification_groups = task_api_specifications[task_data[0].task_name]
             for _ in range(self._num_base_examples):
                 prompt, new_instr = self._construct_new_data(
                     api_specification_groups, task_data

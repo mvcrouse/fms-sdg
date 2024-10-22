@@ -193,11 +193,15 @@ def register_data_builder(name):
 
 
 def get_data_builder(name, *args: Any, **kwargs: Any):
+    return get_data_builder_class(name)(*args, **kwargs)
+
+
+def get_data_builder_class(name):
     if name not in DATABUILDER_REGISTRY:
         raise KeyError(
             f"Attempted to load data builder '{name}', but no data builder for this name found! Supported data builder names: {', '.join(DATABUILDER_REGISTRY.keys())}"
         )
-    return DATABUILDER_REGISTRY[name](*args, **kwargs)
+    return DATABUILDER_REGISTRY[name]
 
 
 DATALOADER_REGISTRY = {}
