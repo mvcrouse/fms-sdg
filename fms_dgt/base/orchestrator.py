@@ -102,8 +102,8 @@ class DataBuilderOrchestrator(ABC):
 
         # TODO: relax assumption that we're working with one node
         node = ray.nodes()[0]
-        worker_cpus = int(node["Resources"]["CPU"] // self._parallel_workers)
-        worker_gpus = int(node["Resources"]["GPU"] // self._parallel_workers)
+        worker_cpus = int(node["Resources"].get("CPU", 1) // self._parallel_workers)
+        worker_gpus = int(node["Resources"].get("GPU", 0) // self._parallel_workers)
 
         for _ in range(self._parallel_workers):
             actor = ray.remote(num_cpus=worker_cpus, num_gpus=worker_gpus)(
