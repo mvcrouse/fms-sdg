@@ -52,9 +52,7 @@ class SimpleInstructDataBuilder(DataBuilder):
         return prompt
 
     def __call__(
-        self,
-        request_idx: int,
-        instruction_data: List[InstructLabSdgData],
+        self, instruction_data: List[InstructLabSdgData]
     ) -> List[InstructLabSdgData]:
 
         inputs: List[Dict] = []
@@ -98,8 +96,7 @@ class SimpleInstructDataBuilder(DataBuilder):
 
         post_process_duration = time.time() - post_process_start
         sdg_logger.info(
-            "Request %s took %.2fs, post-processing took %.2fs",
-            request_idx,
+            "Request took %.2fs, post-processing took %.2fs",
             request_duration,
             post_process_duration,
         )

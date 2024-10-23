@@ -78,3 +78,7 @@ class SqlSdgTask(SdgTask):
                 config_path=self._config_path,
             )
         )
+
+    def get_builder_inputs(self) -> SqlSdgData:
+        # this data builder outputs data in a different format than the input, so only the original seed data should be used
+        return self.get_example()

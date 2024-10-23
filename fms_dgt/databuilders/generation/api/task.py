@@ -1,6 +1,6 @@
 # Standard
 from dataclasses import asdict, dataclass
-from typing import Any, Dict, List
+from typing import Any, Dict, List, Tuple
 import copy
 import json
 import random
@@ -121,3 +121,7 @@ class ApiSdgTask(SdgTask):
             [json.dumps(data.api_specifications[k]) for k in keep_apis]
         )
         return super().instantiate_instruction(data_copy)
+
+    def get_builder_inputs(self) -> Tuple[Dict, List[SdgData]]:
+        # returns both api specifications as well as examples to process
+        return (self.all_api_specifications, self.get_batch_examples())

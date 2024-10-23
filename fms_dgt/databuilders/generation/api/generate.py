@@ -1,12 +1,11 @@
 # Standard
-from typing import Any, Dict, List, Optional
+from typing import Any, Dict, List, Optional, Tuple
 import random
 import time
 
 # Local
 from fms_dgt.base.databuilder import DataBuilder
 from fms_dgt.base.registry import register_data_builder
-from fms_dgt.base.task import group_data_by_task
 from fms_dgt.blocks.generators.llm import LMGenerator
 from fms_dgt.blocks.validators.api import APIGenSpecValidator, ApiGenSpecYesNoValidation
 from fms_dgt.blocks.validators.rouge import RougeDedupValidator
@@ -41,21 +40,14 @@ class ApiDataBuilder(DataBuilder):
     val2: RougeDedupValidator
 
     def __call__(
-        self,
-        request_idx: int,
-        instruction_data: List[ApiSdgData],
+        self, instruction_data_w_apis: List[Tuple[Dict, List[ApiSdgData]]]
     ) -> List[ApiSdgData]:
 
-        task_api_specifications = dict(
-            {task.name: task.all_api_specifications for task in self.tasks}
-        )
-
         # first generate new data
-        instruction_data = instruction_data + []
-        random.shuffle(instruction_data)
         gen_inputs: List[Dict] = []
-        for task_data in group_data_by_task(instruction_data):
-            api_specification_groups = task_api_specifications[task_data[0].task_name]
+        for api_specification_groups, task_data in instruction_data_w_apis:
+            task_data = task_data + []
+            random.shuffle(task_data)
             for _ in range(self._num_base_examples):
                 prompt, new_instr = self._construct_new_data(
                     api_specification_groups, task_data
@@ -77,13 +69,15 @@ class ApiDataBuilder(DataBuilder):
 
         outputs, wf_discarded = self._wf_filter_data(llm_outputs)
 
+        instruction_data = [
+            ex for _, task_data in instruction_data_w_apis for ex in task_data
+        ]
         outputs, rouge_discarded = self._rouge_filter_data(outputs, instruction_data)
 
         # return
         post_process_duration = time.time() - post_process_start
         sdg_logger.info(
-            "Request %s took %.2fs, post-processing took %.2fs, discarded %s instances due to violated constraints, discarded %s instances due to rouge similarity",
-            request_idx,
+            "Request took %.2fs, post-processing took %.2fs, discarded %s instances due to violated constraints, discarded %s instances due to rouge similarity",
             request_duration,
             post_process_duration,
             wf_discarded,

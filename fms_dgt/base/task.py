@@ -375,6 +375,14 @@ class SdgTask:
 
         return outputs
 
+    def get_builder_inputs(self) -> List[SdgData]:
+        """Returns the inputs for the databuilder that will be used to process this task
+
+        Returns:
+            List[SdgData]: Batch of examples to be processed
+        """
+        return self.get_batch_examples()
+
     def is_complete(self) -> bool:
         """Indicates whether SDG task has completed.
 
