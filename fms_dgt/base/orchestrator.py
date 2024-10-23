@@ -236,6 +236,10 @@ class DataBuilderOrchestrator(ABC):
         Args:
             completed_tasks (List[SdgTask]): tasks that have been completed and can undergo postprocessing
         """
+
+        # TODO: fix
+        return
+
         post_proc_blocks = [
             b for b in self.blocks if isinstance(b, BasePostProcessingBlock)
         ]
