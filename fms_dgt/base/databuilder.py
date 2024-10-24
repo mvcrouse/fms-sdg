@@ -1,20 +1,14 @@
 # Standard
 from abc import ABC
 from dataclasses import dataclass
-from typing import Any, Dict, Iterable, List, Mapping, Optional, Type, Union
+from typing import Dict, List, Mapping, Optional, Union
 import json
-import time
-
-# Third Party
-from tqdm import tqdm
 
 # Local
-from fms_dgt.base.block import BaseBlock, get_row_name
+from fms_dgt.base.block import BaseBlock
 from fms_dgt.base.registry import get_block
 from fms_dgt.base.task import SdgData, SdgTask, TransformTask
-from fms_dgt.base.task_card import TaskRunCard
 from fms_dgt.blocks.generators.llm import CachingLM
-from fms_dgt.blocks.postprocessors import BasePostProcessingBlock
 from fms_dgt.constants import NAME_KEY, TYPE_KEY
 from fms_dgt.utils import all_annotations, init_dataclass_from_dict, sdg_logger
 
@@ -33,12 +27,15 @@ class DataBuilderConfig(dict):
     """
 
     name: Optional[str] = None
-    blocks: Optional[dict] = None
+    blocks: Optional[List[dict]] = None
+    post_processing: Optional[List[dict]] = None
     metadata: Optional[dict] = None
 
     def __post_init__(self) -> None:
         if self.blocks is None:
             self.blocks = []
+        if self.post_processing is None:
+            self.post_processing = []
 
 
 class DataBuilder(ABC):
@@ -64,7 +61,12 @@ class DataBuilder(ABC):
         self._kwargs = kwargs
 
         # initialize blocks
+        self._blocks: List[BaseBlock] = []
         self._init_blocks()
+
+        # initialize post processing
+        self._post_proc_blocks: List[BaseBlock] = []
+        self._init_post_proc_blocks()
 
     @property
     def name(self) -> str:
@@ -93,6 +95,15 @@ class DataBuilder(ABC):
         """
         return self._blocks
 
+    @property
+    def post_proc_blocks(self) -> List[BaseBlock]:
+        """Returns the post processing blocks associated with this class.
+
+        Returns:
+            List[BaseBlock]: List of blocks to be used in this data builder
+        """
+        return self._post_proc_blocks
+
     def _init_blocks(self):
         """This method does two things:
 
@@ -102,8 +113,6 @@ class DataBuilder(ABC):
 
         This method is intended to be overloaded when type checking is not necessary (e.g., in the case of the Pipeline class).
         """
-        self._blocks: List[BaseBlock] = []
-
         # TODO: need to handle nested blocks
         for obj_kwargs in self.config.blocks:
 
@@ -138,6 +147,26 @@ class DataBuilder(ABC):
 
             setattr(self, obj_name, obj)
 
+            self._blocks.append(obj)
+
+    def _init_post_proc_blocks(self):
+        """This method initializes any post-processing blocks the user has"""
+        # TODO: need to handle nested blocks
+        for obj_kwargs in self.config.post_processing:
+
+            for req_key in (NAME_KEY, TYPE_KEY):
+                assert (
+                    req_key in obj_kwargs
+                ), f"'{req_key}' field missing in data builder config from block with args:\n{json.dumps(obj_kwargs, indent=4)} "
+
+            obj = get_block(
+                obj_kwargs.get(TYPE_KEY),
+                build_id=self._build_id,
+                builder_name=self.name,
+                **obj_kwargs,
+            )
+            self._post_proc_blocks.append(obj)
+
     def __call__(self, instruction_data: List[SdgData]) -> List[SdgData]:
         """Contains the main logic of a data builder. Takes in a list of data objects to be used as seed data and returns a list of data objects that reflect new instances
 
@@ -152,3 +181,5 @@ class DataBuilder(ABC):
 
 class TransformationDataBuilder(DataBuilder):
     """Class for transformation data builder"""
+
+    TASK_TYPE: TransformTask = TransformTask

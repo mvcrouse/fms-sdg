@@ -47,6 +47,8 @@ class ApiLlmTransformDataBuilder(TransformationDataBuilder):
 
         api_to_str = self.generate_llm_paraphrase(api_str_list)
 
+        outputs = []
+
         # reconstruct the data with llm-paraphrases
         for dialog_id, conv in api_str_dialog_map.items():
             split, task_name, seed_api_group = dialog_info[dialog_id]
@@ -69,15 +71,18 @@ class ApiLlmTransformDataBuilder(TransformationDataBuilder):
                     api_str = api_str + "." if not api_str.endswith(".") else api_str
                     input_list.append(api_str)
             if input_list and output_list:
-                yield ApiTransformData(
-                    **{
-                        "split": split,
-                        "task_name": task_name,
-                        "input": " ".join(input_list),
-                        "output": output_list,
-                        "seed_api_group": seed_api_group,
-                    }
+                outputs.append(
+                    ApiTransformData(
+                        **{
+                            "split": split,
+                            "task_name": task_name,
+                            "input": " ".join(input_list),
+                            "output": output_list,
+                            "seed_api_group": seed_api_group,
+                        }
+                    )
                 )
+        return outputs
 
     def parse_function_call(self, function_call):
         pattern = re.compile(r"(\w+)\(([^)]*)\)")
@@ -141,6 +146,7 @@ class ApiSnipsAtisTransformDataBuilder(TransformationDataBuilder):
         self,
         instruction_data: List[ApiSnipsAtisTransformData],
     ) -> Iterable[ApiTransformData]:
+        outputs = []
         for data in tqdm(instruction_data, "snips_atis Transformation"):
             try:
                 text = data.text
@@ -232,17 +238,20 @@ class ApiSnipsAtisTransformDataBuilder(TransformationDataBuilder):
                     # apis.append(f'{all_intents[i]}({", ".join(params_lst)})')
                     apis.append(api)
 
-                yield ApiTransformData(
-                    **{
-                        "task_name": task_name,
-                        "split": split,
-                        "input": sentence,
-                        "output": apis,
-                        "seed_api_group": seed_api_group,
-                    }
+                outputs.append(
+                    ApiTransformData(
+                        **{
+                            "task_name": task_name,
+                            "split": split,
+                            "input": sentence,
+                            "output": apis,
+                            "seed_api_group": seed_api_group,
+                        }
+                    )
                 )
             except IndexError:
                 pass
+        return outputs
 
 
 def split_string_on_delimiters(string, delimiters, max_splits=None):
@@ -311,6 +320,7 @@ class ApiTopv2TransformDataBuilder(TransformationDataBuilder):
         self,
         instruction_data: List[ApiTopv2TransformData],
     ) -> Iterable[ApiTransformData]:
+        outputs = []
         for data in tqdm(instruction_data, "Topv2 Transformation"):
             input_string = data.input_string
             ontologies = data.ontologies
@@ -358,15 +368,18 @@ class ApiTopv2TransformDataBuilder(TransformationDataBuilder):
                 for api in ordered_seq:
                     only_apis.append(api[0])
 
-                yield ApiTransformData(
-                    **{
-                        "task_name": task_name,
-                        "split": split,
-                        "input": question,
-                        "output": only_apis,
-                        "seed_api_group": seed_api_group,
-                    }
+                outputs.append(
+                    ApiTransformData(
+                        **{
+                            "task_name": task_name,
+                            "split": split,
+                            "input": question,
+                            "output": only_apis,
+                            "seed_api_group": seed_api_group,
+                        }
+                    )
                 )
+        return outputs
 
 
 def extract_slots(input_string):
