@@ -8,7 +8,7 @@ from tqdm import tqdm
 # Local
 from fms_dgt.base.databuilder import TransformationDataBuilder
 from fms_dgt.base.registry import register_data_builder
-from fms_dgt.blocks.generators.llm import LMGenerator
+from fms_dgt.blocks.generators.llm import LMBlockData, LMGenerator
 from fms_dgt.blocks.validators import BaseValidatorBlock
 from fms_dgt.databuilders.transformation.cot.task import CotSdgData, CotTransformTask
 
@@ -44,9 +44,18 @@ class CotTransformDataBuilder(TransformationDataBuilder):
                 }
             )
 
-        llm_outputs = self.llm1(llm_inputs)
+        llm_outputs: List[LMBlockData] = self.llm1(llm_inputs)
 
-        val_outputs = self.val1(llm_outputs)
+        llm_samp_outputs = []
+        for llm_output in llm_outputs:
+            res = (
+                llm_output["result"]
+                if isinstance(llm_output["result"], list)
+                else [llm_output["result"]]
+            )
+            llm_samp_outputs.extend([{**llm_output, "result": r} for r in res])
+
+        val_outputs = self.val1(llm_samp_outputs)
 
         for output in val_outputs:
             response = output["result"].strip()
